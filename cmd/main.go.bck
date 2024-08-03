@@ -1,0 +1,93 @@
+package main
+
+import (
+	"fmt"
+	"sync"
+	"time"
+)
+
+type Page struct {
+	Url      string
+	LoadTime int
+}
+
+var urlExists = make(map[string]bool)
+
+var mockResults = map[string][]Page{
+	"https://golang.org/": {
+		Page{"https://golang.org/pkg/", 1000},
+		Page{"https://golang.org/cmd/", 900},
+	},
+	"https://golang.org/pkg/": {
+		Page{"https://golang.org/", 500},
+		Page{"https://golang.org/cmd/", 900},
+		Page{"https://golang.org/pkg/fmt/", 1500},
+		Page{"https://golang.org/pkg/os/", 1400},
+		Page{"https://golang.org/pkg/strconv/", 2000},
+		Page{"https://golang.org/pkg/crypto/", 1200},
+		Page{"https://golang.org/pkg/image/", 1900},
+	},
+	"https://golang.org/pkg/fmt/": {
+		Page{"https://golang.org/", 500},
+		Page{"https://golang.org/pkg/", 1000},
+	},
+	"https://golang.org/pkg/os/": {
+		Page{"https://golang.org/", 500},
+		Page{"https://golang.org/pkg/", 1000},
+	},
+	"https://golang.org/pkg/image/": {
+		Page{"https://golang.org/pkg/image/Alpha", 1400},
+		Page{"https://golang.org/pkg/image/Alpha16", 1600},
+		Page{"https://golang.org/pkg/image/CMYK", 1300},
+		Page{"https://golang.org/pkg/image/Config", 1500},
+	},
+}
+
+func Crawl(page Page, depth int, wg *sync.WaitGroup) {
+
+	if depth <= 0 {
+		return
+	}
+	if urlExists[page.Url] {
+		return
+	}
+
+	urlExists[page.Url] = true
+
+	time.Sleep(time.Duration(page.LoadTime * int(time.Millisecond)))
+	pages := page.Load()
+
+	if len(pages) > 0 {
+		for _, childPage := range pages {
+			fmt.Printf("[%s]---------------------->[%s]\n", page.Url, childPage.Url)
+			wg.Add(1)   //Add goroutine
+			go func() { //Wrap Crawl function inside anonymous func
+				Crawl(childPage, depth-1, wg)
+				defer wg.Done() //Decrement waitgroup
+			}()
+		}
+
+	} else {
+		fmt.Printf("[%s]----------------------> NONE FOUND\n", page.Url)
+	}
+
+	return
+}
+
+// Load function to load pages
+func (p Page) Load() []Page {
+	if pages, ok := mockResults[p.Url]; ok {
+		return pages
+	}
+	return []Page{}
+}
+
+func main() {
+	start := time.Now()
+	var wg sync.WaitGroup
+	root := Page{"https://golang.org/", 500}
+	Crawl(root, 4, &wg)
+	wg.Wait()
+	duration := time.Since(start)
+	fmt.Println(duration)
+}
